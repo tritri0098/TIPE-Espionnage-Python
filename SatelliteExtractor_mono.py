@@ -20,12 +20,16 @@ from geopy.geocoders import Nominatim
 
 config = SHConfig() # Configuration API client de Sentinel Hub
 
+config.instance_id = 'SatelliteExctractor'
+config.sh_client_id = '51f0c297-a678-468a-a626-3d6c591949de'
+config.sh_client_secret = 'F<mv8zJWwx8!(GiecSDn%[,eUy6et8iR?*4>zvks'
+
 if not config.sh_client_id or not config.sh_client_secret:
     print("Les codes Sentinel Hub ne sont pas valides !\n")
 
 
-city = 'Paris' # Ville à scanner
-time_int = 60  # en jours
+city = 'Washington DC' # Ville à scanner
+time_int = 6000  # en jours
 
 # Méthodes de conversions de coordonées géographiques en WGS84 (EPSG:4326) géoide
 
@@ -83,6 +87,8 @@ elif "area_urban_km2" in infobox_keys: # Plus grossier la zone périurbaine éta
 elif "area_blank2_km2" in infobox_keys: # En dernier recours ...
     typical_length = math.sqrt(float(pageData.infobox["area_blank2_km2"]))
 
+print(typical_length)
+
 # Récupération des coordonnées via Geopy
 
 geolocator = Nominatim(user_agent="SatelliteExtractor")
@@ -103,6 +109,8 @@ city_size = bbox_to_dimensions(city_bbox, resolution=resolution)
 if max(city_size) > 2500: # Si il y a un dépassement de taille -> on veut max 2500px en largeur ou hauteur
     resolution *= ((max(city_size))/2500) # Affinage
     city_size = bbox_to_dimensions(city_bbox, resolution=resolution)
+
+print(resolution)
 
 # Requêtes d'acquisition d'images en couleurs "vraies"
 
