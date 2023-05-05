@@ -28,8 +28,8 @@ if not config.sh_client_id or not config.sh_client_secret:
     print("Les codes Sentinel Hub ne sont pas valides !\n")
 
 
-city = 'Washington DC' # Ville à scanner
-time_int = 6000  # en jours
+city = 'Karkov' # Ville à scanner
+time_int = 700  # en jours
 
 # Méthodes de conversions de coordonées géographiques en WGS84 (EPSG:4326) géoide
 
@@ -136,16 +136,39 @@ evalscript_true_color = """
 """
 # le gain sert à éclaircir les images qui ont tendances à êtres beaucoup trop sombres
 
+evalscript_dem = """
+    //VERSION=3
+
+    function setup() {
+      return {
+        input: ["DEM"],
+        output:{
+            id: "default",
+            bands: 1,
+            sampleType: SampleType.FLOAT32
+        }
+      }
+    }
+    
+    gain = 0.005
+    
+    function evaluatePixel(sample) {
+      return [sample.DEM*gain]
+    }
+"""
+# le gain sert à éclaircir les images qui ont tendances à êtres beaucoup trop claires
+
 # Gestion de l'intervalle de temps d'acuisition des images
 today = datetime.date.today()
 prec_date = today - datetime.timedelta(days=time_int)
 
+# On récupère l'image en couleur
 request_true_color = SentinelHubRequest(
-    data_folder="C:/Users/migno/Desktop/satellite",
+    data_folder="C:/Users/migno/OneDrive/Bureau/satellite",
     evalscript=evalscript_true_color,
     input_data=[
         SentinelHubRequest.input_data(
-            data_collection=DataCollection.SENTINEL2_L2A, # alternative :  SENTINEL2_L1C
+            data_collection=DataCollection.SENTINEL2_L2A, # alternative : SENTINEL2_L1C
             time_interval=(prec_date, today),
             mosaicking_order=MosaickingOrder.LEAST_CC
         )
@@ -157,6 +180,25 @@ request_true_color = SentinelHubRequest(
 )
 
 true_color_imgs = request_true_color.get_data(save_data=True)
+
+# Maintenant on récupère les données altimétriques
+request_dem = SentinelHubRequest(
+    data_folder="C:/Users/migno/OneDrive/Bureau/satellite",
+    evalscript=evalscript_dem,
+    input_data=[
+        SentinelHubRequest.input_data(
+            data_collection=DataCollection.DEM,
+            time_interval=(prec_date, today),
+            mosaicking_order=MosaickingOrder.LEAST_CC
+        )
+    ],
+    responses=[SentinelHubRequest.output_response("default", MimeType.TIFF)],
+    bbox=city_bbox,
+    size=city_size,
+    config=config,
+)
+
+dem_imgs        = request_dem.get_data(save_data=True)
 
 #image = true_color_imgs[0] # Pour récupérer l'image dans le script
 
