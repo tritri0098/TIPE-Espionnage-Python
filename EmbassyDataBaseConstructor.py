@@ -12,7 +12,7 @@ import time
 import pandas as pd
 
 
-target_country = 'France'.lower() # Pays cible (en minuscule)
+target_country = 'Bahrain'.lower() # Pays cible (en minuscule)
 
 # Geopy
 ctx = ssl._create_unverified_context(cafile=certifi.where())
@@ -81,12 +81,18 @@ for i in links_countries:
                     lng = location_goo.longitude
 
                     coords = str(lat)+','+str(lng) # On reconstitue la chaîne de caractère
+
                 else:
                     # Obtention et conversions de la latitude / longitude
                     lat = float(regex_match.group(1)) # Latitude
                     lng = float(regex_match.group(2)) # Longitude
 
-                location_nom_by_coords = geolocator_nom.reverse(coords, language='en')  # Moins précis mais gratuit (suffisant pour le nom des villes, pays)
+                try:
+                    location_nom_by_coords = geolocator_nom.reverse(coords, language='en')  # Moins précis mais gratuit (suffisant pour le nom des villes, pays)
+                except: # Les coordonnées ont été inversées sur le site
+                    lng, lat = lat, lng
+                    coords = (lat,lng)
+                    location_nom_by_coords = geolocator_nom.reverse(coords, language='en')  # Moins précis mais gratuit (suffisant pour le nom des villes, pays)
                 if location_nom_by_coords != None:
                     address_raw_nom = location_nom_by_coords.raw['address']
                     if address_raw_nom.get('city') is not None:
@@ -142,21 +148,11 @@ for i in links_countries:
 
                 # Détermination de l'altitude (élévation)
                 query = ('https://api.opentopodata.org/v1/test-dataset?locations='+str(lat)+','+str(lng))
-                '''try:
+                try:
                     req = requests.get(query).json()
                     alt = pd.json_normalize(req, 'results').values[0][1]
                 except:
-                    () # On ne fait rien sinon'''
-
-                # Détermination de l'albedo (luminosité de la surface terrestre)
-                query = ('https://cmr.earthdata.nasa.gov/search/tiles?point=' + str(lat) + ',' + str(lng))
-                req = requests.get(query).json()
-                print(req)
-                try:
-
-                    alb = pd.json_normalize(req, 'results').values[0][1]
-                except:
-                    ()  # On ne fait rien sinon
+                    () # On ne fait rien sinon
 
                 time.sleep(0.5)  # Version gratuite de l'API OpenTopoData: il faut patienter entre chaque requête
 
