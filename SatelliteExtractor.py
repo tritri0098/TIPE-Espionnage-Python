@@ -30,15 +30,15 @@ np.set_printoptions(threshold=sys.maxsize)
 config = SHConfig()  # Configuration API client de Sentinel Hub
 
 config.instance_id = 'SatelliteExtractor'
-config.sh_client_id = '51f0c297-a678-468a-a626-3d6c591949de'
-config.sh_client_secret = 'F<mv8zJWwx8!(GiecSDn%[,eUy6et8iR?*4>zvks'
+config.sh_client_id = '8c7b2184-deba-47bb-80df-c7a82acb73bd'
+config.sh_client_secret = 'fv8X8AT>vRDD)UNBxLQLlp0.c?JXg[J*J,qsP^NT'
 
 if not config.sh_client_id or not config.sh_client_secret:
     print("Les codes Sentinel Hub ne sont pas valides !\n")
 
 time_int = 1461  # Intervalle (en jours pour chercher les photos avec le moins de nuages)
 
-target_country = 'France'.lower()
+target_country = 'Bahrain'.lower()
 
 embassies_list = [] # Liste des informations sur chaque ambassade. Format : [pays cible, pays hôte de l'ambassade, ville, adresse, lat, lng]
 
