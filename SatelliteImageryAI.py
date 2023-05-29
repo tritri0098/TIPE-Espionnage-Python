@@ -6,7 +6,16 @@ from patchify import patchify
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
+import tensorflow as tf # Attention on utilise tensorflow==2.4 car incompatiblité avec keras==2.11
 from tensorflow.keras.utils import to_categorical
+from keras.models import Model # Attention ! On utilise keras==2.4 car incompatibilité avec tensorflow==2.11
+from keras.layers import Input,Conv2D, MaxPooling2D, UpSampling2D, Conv2DTranspose
+from keras.layers import concatenate, BatchNormalization, Dropout, Lambda
+from keras import backend as K # Keras = squelette du DCNN (haut-niveau, faibles performances) mais les calculs sont faits via la backend par du code bas-niveau (tensorflow par défaut)
+from keras.models import load_model
+import segmentation_models as sm # On utilise la version 1.0.1 et non pas la 0.2.1 ! ($pip install segmentation-models et non pas $pip install segmentation_models)
+
+print(tf.config.list_physical_devices('GPU'))
 
 minmaxscaler = MinMaxScaler()
 
@@ -106,6 +115,7 @@ def rgb_to_label(label):
     return label_segment
 
 labels = []
+
 for i in range(mask_dataset.shape[0]):
     label = rgb_to_label(mask_dataset[i])
     labels.append(label)
@@ -121,7 +131,191 @@ master_training_dataset = image_dataset
 
 x_train, x_test, y_train, y_test = train_test_split(master_training_dataset, labels_categorical_dataset, test_size=0.15, random_state=100)
 
-print(x_train.shape)
-print(x_test.shape)
-print(y_train.shape)
-print(y_test.shape)
+image_height   = x_train.shape[1]
+image_width    = x_train.shape[2]
+image_channels = x_train.shape[3]
+total_classes  = y_train.shape[3]
+
+# Partie Deep Learning
+
+def jaccard_coef(y_true, y_pred): # permet de rendre compte de l'accord entre le dataset et les prédictions (1 = parfait, 0 = complètement nul)
+    y_true_flatten = K.flatten(y_true)
+    y_pred_flatten = K.flatten(y_pred)
+    intersection = K.sum(y_true_flatten * y_pred_flatten)
+    final_coef_value = (intersection + 1.0) / (K.sum(y_true_flatten) + K.sum(y_pred_flatten) - intersection + 1.0)
+    return final_coef_value
+
+def multi_unet_model(n_classes=total_classes, image_height=image_height, image_width=image_width, image_channels=1):
+    # On suit exactement le modèle ReLU
+    inputs = Input((image_height, image_width, image_channels))
+
+    source_input = inputs
+    dropout_coef = 0.2  # On peut changer la valeur jusqu'à trouver celle qui minimise le coefficient de Jaccard
+
+    c1 = Conv2D(16, (3,3), activation="relu", kernel_initializer="he_normal", padding="same")(source_input)
+    c1 = Dropout(dropout_coef)(c1)
+    c1 = Conv2D(16, (3,3), activation="relu", kernel_initializer="he_normal", padding="same")(c1)
+    p1 = MaxPooling2D((2,2))(c1)
+
+    c2 = Conv2D(32, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(p1)
+    c2 = Dropout(dropout_coef)(c2)
+    c2 = Conv2D(32, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(c2)
+    p2 = MaxPooling2D((2, 2))(c2)
+
+    c3 = Conv2D(64, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(p2)
+    c3 = Dropout(dropout_coef)(c3)
+    c3 = Conv2D(64, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(c3)
+    p3 = MaxPooling2D((2, 2))(c3)
+
+    c4 = Conv2D(128, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(p3)
+    c4 = Dropout(dropout_coef)(c4)
+    c4 = Conv2D(128, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(c4)
+    p4 = MaxPooling2D((2, 2))(c4)
+
+    c5 = Conv2D(256, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(p4)
+    c5 = Dropout(dropout_coef)(c5)
+    c5 = Conv2D(256, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(c5)
+
+    u6 = Conv2DTranspose(128, (2,2), strides=(2,2), padding="same")(c5)
+    u6 = concatenate([u6, c4])
+    c6 = Conv2D(128, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(u6)
+    c6 = Dropout(dropout_coef)(c6)
+    c6 = Conv2D(128, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(c6)
+
+    u7 = Conv2DTranspose(64, (2, 2), strides=(2, 2), padding="same")(c6)
+    u7 = concatenate([u7, c3])
+    c7 = Conv2D(64, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(u7)
+    c7 = Dropout(dropout_coef)(c7)
+    c7 = Conv2D(64, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(c7)
+
+    u8 = Conv2DTranspose(32, (2, 2), strides=(2, 2), padding="same")(c7)
+    u8 = concatenate([u8, c2])
+    c8 = Conv2D(32, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(u8)
+    c8 = Dropout(dropout_coef)(c8)
+    c8 = Conv2D(32, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(c8)
+
+    u9 = Conv2DTranspose(16, (2, 2), strides=(2, 2), padding="same")(c8)
+    u9 = concatenate([u9, c1], axis=3) # Attention : axis=3
+    c9 = Conv2D(16, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(u9)
+    c9 = Dropout(dropout_coef)(c9)
+    c9 = Conv2D(16, (3, 3), activation="relu", kernel_initializer="he_normal", padding="same")(c9)
+
+    outputs = Conv2D(n_classes, (1,1), activation="softmax")(c9)
+    model = Model(inputs=[inputs], outputs=[outputs])
+    return model
+
+metrics = ["accuracy", jaccard_coef]
+
+def get_deep_learning_model():
+    return multi_unet_model(n_classes=total_classes, image_height=image_height, image_width=image_width, image_channels=image_channels)
+
+model = get_deep_learning_model()
+
+
+# Loss function
+
+weights = [0.166,0.166,0.166,0.166,0.166,0.166] # pour le nombre de poids et les poids se réferrer à la théorie sur le focal loss
+dice_loss = sm.losses.DiceLoss(class_weights=weights)
+focal_loss = sm.losses.CategoricalFocalLoss() # permet de plus pondérer les classes minoritaires dans les exemples que les classes faciles à identifier (=> moins de biais dûs à l'entropie croisée)
+total_loss = dice_loss + (1 * focal_loss)
+
+tf.keras.backend.clear_session()
+
+model.compile(optimizer="adam", loss=total_loss, metrics=metrics)
+
+#print(model.summary()) # permet de voir les caractéristiques du modèle
+
+# Entraînement du modèle
+# Si possible utiliser l'accélération matérielle par GPU
+# -> installer cuda toolkit
+
+nb_epochs = 100 # nombre de passes (plus => meilleure fiabilité)
+
+model_history = model.fit(x_train, y_train, batch_size=16, verbose=1, epochs=nb_epochs, validation_data=(x_test, y_test), shuffle=False)
+
+history_a = model_history
+
+loss = history_a.history['loss']
+val_loss = history_a.history['val_loss']
+jaccard_coef = history_a.history['jaccard_coef']
+val_jaccard_coef = history_a.history['val_jaccard_coef']
+
+epochs = range(1, len(loss) + 1)
+
+plt.plot(epochs, loss, 'y', label="Training Loss")
+plt.plot(epochs, val_loss, 'r', label="Validation Loss")
+plt.title("Training Vs Validation Loss")
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
+
+epochs = range(1, len(jaccard_coef) + 1)
+
+plt.plot(epochs, jaccard_coef, 'y', label="Training IoU")
+plt.plot(epochs, val_jaccard_coef, 'r', label="Validation IoU")
+plt.title("Training Vs Validation IoU")
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
+
+# Prédictions
+
+y_pred = model.predict(x_test)
+
+#print(len(y_pred))
+
+# Comparaisons visuelles entre test et prédiction
+
+y_pred_argmax = np.argmax(y_pred, axis=3)
+y_test_argmax = np.argmax(y_test, axis=3)
+
+test_image_number = 4 #id de l'image à comparer
+
+test_image = x_test[test_image_number]
+ground_truth_image = y_test_argmax[test_image_number]
+
+test_image_input = np.expand_dims(test_image, 0)
+
+prediction = model.predict(test_image_input)
+predicted_image = np.argmax(prediction, axis=3)
+
+predicted_image = predicted_image[0,:,:]
+
+plt.imshow(test_image)
+plt.imshow(ground_truth_image)
+plt.imshow(predicted_image)
+
+# Sauevgarde du modèle
+
+model_name = "dubai_model"
+model.save(f"F:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5")
+
+#model.loss.name #permet de trouver le nom de la fonction perte pour bien paramétrer la fonction load_model
+
+# Chargement du modèle
+
+saved_model = load_model(f"F:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5", custom_objects=({'dice_loss_plus_1focal_loss' : total_loss, 'jaccard_coef': jaccard_coef}))
+#saved_model.get_config() # Permet de vérifier que le modèle chargé est cohérent (que c'est bien celui qui a été sauvegardé)
+
+# Prédictions
+
+image = Image.open("F:/Documents/Prepa/TIPE/espionnage/IA/datasets/testing/response.tiff")
+orig = image
+
+image = image.resize((256,256))
+image = np.array(image)
+image = np.expand_dims(image, 0)
+
+predicted = saved_model.predict(image)
+predicted_im = np.argmax(predicted, axis=3)
+predicted_im = predicted_im[0,:,:]
+
+plt.figure(figsize=(14,8))
+plt.subplot(231)
+plt.title("Original Image")
+plt.imshow(orig)
+plt.subplot(232)
+plt.title("Predicted Image")
+plt.imshow(predicted_im)
