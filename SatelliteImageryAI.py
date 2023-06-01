@@ -1,8 +1,11 @@
 import os
+import sys
+import time
+
 import cv2
 from PIL import Image
 import numpy as np
-from patchify import patchify
+#from patchify import patchify
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
@@ -15,22 +18,46 @@ from keras import backend as K # Keras = squelette du DCNN (haut-niveau, faibles
 from keras.models import load_model
 import segmentation_models as sm # On utilise la version 1.0.1 et non pas la 0.2.1 ! ($pip install segmentation-models et non pas $pip install segmentation_models)
 
+#np.set_printoptions(threshold=sys.maxsize)
+
 print(tf.config.list_physical_devices('GPU'))
 
 minmaxscaler = MinMaxScaler()
 
-dataset_root_folder = "F:/Documents/Prepa/TIPE/espionnage/IA/datasets/training/"
-dataset_name = "DubaiDataset"
+dataset_root_folder = "C:/Documents/Prepa/TIPE/espionnage/IA/datasets/training/"
+dataset_name = "LandCoverNet"
 
-for path, subdirs, files in os.walk(os.path.join(dataset_root_folder, dataset_name)):
+# permet de vérifier qu'il y a autant d'images que de masques
+'''counts_images = []
+counts_masks = []
+
+i = 1
+k = 1'''
+
+'''for path, subdirs, files in os.walk(os.path.join(dataset_root_folder, dataset_name)):
     dir_name = path.split(os.path.sep)[-1]
 
-    if dir_name == 'images':
-        images = os.listdir(path)
+    images = os.listdir(path)
+    str_path = str(path).replace('\\', '/')
+    if str_path.find('/images') != -1 or str_path.find('/masks') != -1:
+        if dir_name == 'images':
+            counts_images.append((len(images), path))
+            i += 1
+        else:
+            counts_masks.append((len(images), path))
+            k += 1'''
 
         '''for i, image_name in enumerate(images):
             if (image_name.endswith('.jpg')):
                 a = True'''
+
+
+'''print(counts_images)
+print(counts_masks)
+
+for j in range(0,len(counts_masks)):
+    if counts_images[j][0] != counts_masks[j][0]:
+        print(counts_images[j])'''
 
 image_patch_size = 256
 
@@ -42,9 +69,9 @@ for image_type in ['images', 'masks']:
         image_extension = 'jpg'
     else:
         image_extension = 'png'
-    for tile_id in range(1,8):
-        for image_id in range(1,10):
-            image = cv2.imread(f'{dataset_root_folder}/{dataset_name}/Tile {tile_id}/{image_type}/image_part_00{image_id}.{image_extension}', 1)
+    for tile_id in range(1,806):
+        for image_id in range(0,40):
+            image = cv2.imread(f'{dataset_root_folder}/{dataset_name}/Tile {tile_id}/{image_type}/image_part_{str(image_id).zfill(3)}.{image_extension}', 1)
             if image is not None:
                 if image_type == 'masks': # Seulement pour les masques
                     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -56,7 +83,13 @@ for image_type in ['images', 'masks']:
                 image = image.crop((0, 0, size_x, size_y))
 
                 image = np.array(image) # Attention ce n'est plus un image mais un ndarray
-                patched_images = patchify(image, (image_patch_size, image_patch_size, 3), step=image_patch_size)
+
+                if image_type == 'images':
+                    image_dataset.append(image)
+                else:
+                    mask_dataset.append(image)
+
+                '''patched_images = patchify(image, (image_patch_size, image_patch_size, 3), step=image_patch_size)
 
                 for i in range(patched_images.shape[0]):
                     for j in range(patched_images.shape[1]):
@@ -74,12 +107,44 @@ for image_type in ['images', 'masks']:
                         else:
                             individual_patched_mask = patched_images[i, j, :, :]
                             individual_patched_mask = individual_patched_mask[0]
-                            mask_dataset.append(individual_patched_mask)
+                            mask_dataset.append(individual_patched_mask)'''
 
 image_dataset = np.array(image_dataset)
 mask_dataset = np.array(mask_dataset)
 
-class_building = '#3C1098'
+class_building = '#888888'
+class_building = class_building.lstrip(('#'))
+class_building = np.array(tuple(int(class_building[i:i+2], 16) for i in (0,2,4)))
+
+class_road = '#d1a46d' # route "naturelle"
+class_road = class_road.lstrip(('#'))
+class_road = np.array(tuple(int(class_road[i:i+2], 16) for i in (0,2,4)))
+
+class_snow = '#f5f5ff'
+class_snow = class_snow.lstrip(('#'))
+class_snow = np.array(tuple(int(class_snow[i:i+2], 16) for i in (0,2,4)))
+
+class_vegetation_woody = '#d64c2b'
+class_vegetation_woody = class_vegetation_woody.lstrip(('#'))
+class_vegetation_woody = np.array(tuple(int(class_vegetation_woody[i:i+2], 16) for i in (0,2,4)))
+
+class_vegetation_cultivated = '#186818'
+class_vegetation_cultivated = class_vegetation_cultivated.lstrip(('#'))
+class_vegetation_cultivated = np.array(tuple(int(class_vegetation_cultivated[i:i+2], 16) for i in (0,2,4)))
+
+class_vegetation_natural = '#00ff00'
+class_vegetation_natural = class_vegetation_natural.lstrip(('#'))
+class_vegetation_natural = np.array(tuple(int(class_vegetation_natural[i:i+2], 16) for i in (0,2,4)))
+
+class_water = '#0000ff'
+class_water = class_water.lstrip(('#'))
+class_water = np.array(tuple(int(class_water[i:i+2], 16) for i in (0,2,4)))
+
+class_unlabeled = '#000000'
+class_unlabeled = class_unlabeled.lstrip(('#'))
+class_unlabeled = np.array(tuple(int(class_unlabeled[i:i+2], 16) for i in (0,2,4)))
+
+'''class_building = '#3C1098'
 class_building = class_building.lstrip(('#'))
 class_building = np.array(tuple(int(class_building[i:i+2], 16) for i in (0,2,4)))
 
@@ -101,16 +166,18 @@ class_water = np.array(tuple(int(class_water[i:i+2], 16) for i in (0,2,4)))
 
 class_unlabeled = '#9B9B9B'
 class_unlabeled = class_unlabeled.lstrip(('#'))
-class_unlabeled = np.array(tuple(int(class_unlabeled[i:i+2], 16) for i in (0,2,4)))
+class_unlabeled = np.array(tuple(int(class_unlabeled[i:i+2], 16) for i in (0,2,4)))'''
 
 def rgb_to_label(label):
     label_segment = np.zeros(label.shape, dtype=np.uint8)
-    label_segment[np.all(label == class_water, axis=-1)] = 0
-    label_segment[np.all(label == class_land, axis=-1)] = 1
-    label_segment[np.all(label == class_road, axis=-1)] = 2
-    label_segment[np.all(label == class_building, axis=-1)] = 3
-    label_segment[np.all(label == class_vegetation, axis=-1)] = 4
-    label_segment[np.all(label == class_unlabeled, axis=-1)] = 5
+    label_segment[np.all(label == class_unlabeled, axis=-1)] = 0
+    label_segment[np.all(label == class_water, axis=-1)] = 1
+    label_segment[np.all(label == class_building, axis=-1)] = 2
+    label_segment[np.all(label == class_road, axis=-1)] = 3
+    label_segment[np.all(label == class_snow, axis=-1)] = 4
+    label_segment[np.all(label == class_vegetation_woody, axis=-1)] = 5
+    label_segment[np.all(label == class_vegetation_cultivated, axis=-1)] = 6
+    label_segment[np.all(label == class_vegetation_natural, axis=-1)] = 7
     label_segment = label_segment[:,:,0]
     return label_segment
 
@@ -119,6 +186,8 @@ labels = []
 for i in range(mask_dataset.shape[0]):
     label = rgb_to_label(mask_dataset[i])
     labels.append(label)
+
+print(image_dataset.shape[0])
 
 labels = np.array(labels)
 
@@ -214,7 +283,7 @@ model = get_deep_learning_model()
 
 # Loss function
 
-weights = [0.166,0.166,0.166,0.166,0.166,0.166] # pour le nombre de poids et les poids se réferrer à la théorie sur le focal loss
+weights = [0.125,0.125,0.125,0.125,0.125,0.125,0.125,0.125] # pour le nombre de poids et les poids se réferrer à la théorie sur le focal loss (pour l'approche uniforme choisir 1/N)
 dice_loss = sm.losses.DiceLoss(class_weights=weights)
 focal_loss = sm.losses.CategoricalFocalLoss() # permet de plus pondérer les classes minoritaires dans les exemples que les classes faciles à identifier (=> moins de biais dûs à l'entropie croisée)
 total_loss = dice_loss + (1 * focal_loss)
@@ -231,7 +300,7 @@ model.compile(optimizer="adam", loss=total_loss, metrics=metrics)
 
 nb_epochs = 100 # nombre de passes (plus => meilleure fiabilité)
 
-model_history = model.fit(x_train, y_train, batch_size=16, verbose=1, epochs=nb_epochs, validation_data=(x_test, y_test), shuffle=False)
+model_history = model.fit(x_train, y_train, batch_size=28, verbose=1, epochs=nb_epochs, validation_data=(x_test, y_test), shuffle=False)
 
 history_a = model_history
 
@@ -289,19 +358,19 @@ plt.imshow(predicted_image)
 
 # Sauevgarde du modèle
 
-model_name = "dubai_model"
-model.save(f"F:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5")
+model_name = "landcovernet_model"
+model.save(f"C:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5")
 
 #model.loss.name #permet de trouver le nom de la fonction perte pour bien paramétrer la fonction load_model
 
 # Chargement du modèle
 
-saved_model = load_model(f"F:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5", custom_objects=({'dice_loss_plus_1focal_loss' : total_loss, 'jaccard_coef': jaccard_coef}))
+saved_model = load_model(f"C:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5", custom_objects=({'dice_loss_plus_1focal_loss' : total_loss, 'jaccard_coef': jaccard_coef}))
 #saved_model.get_config() # Permet de vérifier que le modèle chargé est cohérent (que c'est bien celui qui a été sauvegardé)
 
 # Prédictions
 
-image = Image.open("F:/Documents/Prepa/TIPE/espionnage/IA/datasets/testing/response.tiff")
+'''image = Image.open("C:/Documents/Prepa/TIPE/espionnage/IA/datasets/testing/response.tiff")
 orig = image
 
 image = image.resize((256,256))
@@ -318,4 +387,4 @@ plt.title("Original Image")
 plt.imshow(orig)
 plt.subplot(232)
 plt.title("Predicted Image")
-plt.imshow(predicted_im)
+plt.imshow(predicted_im)'''
