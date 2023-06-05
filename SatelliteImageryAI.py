@@ -22,9 +22,22 @@ import segmentation_models as sm # On utilise la version 1.0.1 et non pas la 0.2
 
 print(tf.config.list_physical_devices('GPU'))
 
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+  # Restrict TensorFlow to only allocate 4GB of memory on the first GPU
+  try:
+    tf.config.experimental.set_virtual_device_configuration(
+        gpus[0],
+        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4096)])
+    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Virtual devices must be set before GPUs have been initialized
+    print(e)
+
 minmaxscaler = MinMaxScaler()
 
-dataset_root_folder = "C:/Documents/Prepa/TIPE/espionnage/IA/datasets/training/"
+dataset_root_folder = "F:/Documents/Prepa/TIPE/espionnage/IA/datasets/training/"
 dataset_name = "LandCoverNet"
 
 # permet de vérifier qu'il y a autant d'images que de masques
@@ -45,14 +58,14 @@ k = 1'''
             i += 1
         else:
             counts_masks.append((len(images), path))
-            k += 1'''
+            k += 1
 
-        '''for i, image_name in enumerate(images):
+        for i, image_name in enumerate(images):
             if (image_name.endswith('.jpg')):
-                a = True'''
+                a = True
 
 
-'''print(counts_images)
+print(counts_images)
 print(counts_masks)
 
 for j in range(0,len(counts_masks)):
@@ -191,6 +204,8 @@ print(image_dataset.shape[0])
 
 labels = np.array(labels)
 
+print(labels)
+
 labels = np.expand_dims(labels, axis=3)
 
 total_classes = len(np.unique(labels))
@@ -283,14 +298,14 @@ model = get_deep_learning_model()
 
 # Loss function
 
-weights = [0.125,0.125,0.125,0.125,0.125,0.125,0.125,0.125] # pour le nombre de poids et les poids se réferrer à la théorie sur le focal loss (pour l'approche uniforme choisir 1/N)
+weights = [0.09642857142,0.09642857142,0.8,0.09642857142,0.09642857142,0.09642857142,0.09642857142,0.09642857142] # pour le nombre de poids et les poids se réferrer à la théorie sur le focal loss (pour l'approche uniforme choisir 1/N)
 dice_loss = sm.losses.DiceLoss(class_weights=weights)
 focal_loss = sm.losses.CategoricalFocalLoss() # permet de plus pondérer les classes minoritaires dans les exemples que les classes faciles à identifier (=> moins de biais dûs à l'entropie croisée)
 total_loss = dice_loss + (1 * focal_loss)
 
 tf.keras.backend.clear_session()
 
-model.compile(optimizer="adam", loss=total_loss, metrics=metrics)
+#model.compile(optimizer="adam", loss=total_loss, metrics=metrics)
 
 #print(model.summary()) # permet de voir les caractéristiques du modèle
 
@@ -298,9 +313,9 @@ model.compile(optimizer="adam", loss=total_loss, metrics=metrics)
 # Si possible utiliser l'accélération matérielle par GPU
 # -> installer cuda toolkit
 
-nb_epochs = 100 # nombre de passes (plus => meilleure fiabilité)
+nb_epochs = 220 # nombre de passes (plus => meilleure fiabilité)
 
-model_history = model.fit(x_train, y_train, batch_size=28, verbose=1, epochs=nb_epochs, validation_data=(x_test, y_test), shuffle=False)
+'''model_history = model.fit(x_train, y_train, batch_size=32, verbose=1, epochs=nb_epochs, validation_data=(x_test, y_test), shuffle=False)
 
 history_a = model_history
 
@@ -359,18 +374,18 @@ plt.imshow(predicted_image)
 # Sauevgarde du modèle
 
 model_name = "landcovernet_model"
-model.save(f"C:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5")
+model.save(f"F:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5")
 
 #model.loss.name #permet de trouver le nom de la fonction perte pour bien paramétrer la fonction load_model
 
 # Chargement du modèle
 
-saved_model = load_model(f"C:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5", custom_objects=({'dice_loss_plus_1focal_loss' : total_loss, 'jaccard_coef': jaccard_coef}))
+saved_model = load_model(f"F:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5", custom_objects=({'dice_loss_plus_1focal_loss' : total_loss, 'jaccard_coef': jaccard_coef}))
 #saved_model.get_config() # Permet de vérifier que le modèle chargé est cohérent (que c'est bien celui qui a été sauvegardé)
 
 # Prédictions
 
-'''image = Image.open("C:/Documents/Prepa/TIPE/espionnage/IA/datasets/testing/response.tiff")
+image = Image.open("C:/Documents/Prepa/TIPE/espionnage/IA/datasets/testing/response.tiff")
 orig = image
 
 image = image.resize((256,256))
@@ -388,3 +403,46 @@ plt.imshow(orig)
 plt.subplot(232)
 plt.title("Predicted Image")
 plt.imshow(predicted_im)'''
+
+model_name = "landcovernet_model_2"
+
+checkpoint_filepath = 'F:/Documents/Prepa/TIPE/espionnage/IA/models/checkpoints/'
+model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+    filepath=checkpoint_filepath,
+    save_weights_only=False,
+    monitor='val_accuracy',
+    mode='max',
+    save_best_only=True)
+
+saved_model = load_model(f"F:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}.h5", custom_objects=({'dice_loss_plus_1focal_loss' : total_loss, 'jaccard_coef': jaccard_coef}))
+#saved_model.get_config() # Permet de vérifier que le modèle chargé est cohérent (que c'est bien celui qui a été sauvegardé)
+tf.keras.backend.clear_session()
+saved_model.compile(optimizer="adam", loss=total_loss, metrics=metrics)
+saved_model_history = saved_model.fit(x_train, y_train, batch_size=32, verbose=1, epochs=nb_epochs, validation_data=(x_test, y_test), shuffle=False, callbacks=[model_checkpoint_callback])
+
+saved_model.save(f"F:/Documents/Prepa/TIPE/espionnage/IA/models/{model_name}_3.h5")
+
+loss = saved_model_history.history['loss']
+val_loss = saved_model_history.history['val_loss']
+jaccard_coef = saved_model_history.history['jaccard_coef']
+val_jaccard_coef = saved_model_history.history['val_jaccard_coef']
+
+epochs = range(1, len(loss) + 1)
+
+plt.plot(epochs, loss, 'y', label="Training Loss")
+plt.plot(epochs, val_loss, 'r', label="Validation Loss")
+plt.title("Training Vs Validation Loss")
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
+
+epochs = range(1, len(jaccard_coef) + 1)
+
+plt.plot(epochs, jaccard_coef, 'y', label="Training IoU")
+plt.plot(epochs, val_jaccard_coef, 'r', label="Validation IoU")
+plt.title("Training Vs Validation IoU")
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
