@@ -57,7 +57,6 @@ for i in links_countries:
             lat = 0.0 # Latitude  par défaut
             lng = 0.0 # Longitude par défaut
             alt = 0.0 # Altitude  par défaut
-            alb = 0.5 # Albedo    par défaut (entre 0.0 et 1.0)
             city = "NullCity"       # Nom de la ville par défaut
             country = "NullCountry" # Nom du pays où se situe l'ambassade par défaut
 
