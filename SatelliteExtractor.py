@@ -452,16 +452,6 @@ for embassy in embassies_list:
             line.append(j)
         dem_heights.append(line)
 
-    # Forêts, végétations, champ plantés
-    avg_green_field = (25, 46, 18)  # D'après échantillon photoshop des images satellite
-    avg_green_forest = (32, 29, 17)  # Forêt moyenne marron-verte
-    # Champs à nu, terre
-    avg_brown_field1 = (102, 72, 40)  # Champ nu marron foncé
-    avg_brown_field2 = (197, 156, 108)  # Champ nu marron clair
-    avg_brown_field3 = (190, 149, 97)  # Champ nu marron moyen
-    # Eaux, fleuves, rivières
-    avg_green_canal = (22, 36, 22)  # Canal
-
     count += 1
 
     print(str(round(count * 100 / total, 2)) + '%')
